@@ -1,7 +1,8 @@
 const express = require('express')
 //const uuid = require('uuid/v4')
 const logger = require('../logger')
-const bookmarks = require('../store')
+//const bookmarks = require('../store')
+const path = require('path')
 const bookmarksServices = require('../bookmarksService')
 const xss = require('xss')
 
@@ -41,7 +42,7 @@ bookmarkRouter
 
         const {title, url, description, rating} = req.body
 
-        if (!Number.isInteger(rating) || rating < 0 || rating > 5) {
+        if (/*!Number.isInteger(rating) ||*/ rating < 0 || rating > 5) {
             logger.error(`Invalid rating '${rating}' supplied`)
             return res.status(400).send({
               error: { message: `'rating' must be a number between 0 and 5` }
@@ -60,7 +61,7 @@ bookmarkRouter
                 logger.info(`Bookmark with id ${bookmark.id} created`);
                 res
                     .status(201)
-                    .location(`/bookmarks/${bookmark.id}`)
+                    .location(path.posix.join(req.originalUrl, `/${bookmark.id}`))
                     .json(sanitizeBookmark(bookmark))
             })
             .catch(next)
@@ -85,44 +86,37 @@ bookmarkRouter
         .catch(next)
     })
     .get((req, res, next) => {
-        // const { id } = req.params;
-        // const bookmark = bookmarks.find(b => b.id == id);
-        // const knexInstance = req.app.get('db')
-
-        // bookmarksServices.getById(knexInstance, req.params.id)
-        //     .then(bookmark => {
-        //         if(!bookmark) {
-        //             logger.error(`Bookmark with id ${req.params.id} not found.`)
-        //             return res
-        //                 .status(404)
-        //                 .send({ error: { message: `Bookmark doesn't exist` } })
-        //         }
-        //         res.json(sanitizeBookmark(bookmark))
-        //     })
-        //     .catch(next)
         res.json(sanitizeBookmark(res.bookmark))
     })
     .delete((req, res, next) => {
-        // const { id } = req.params;
-
-        // const bookmarkIndex = bookmarks.findIndex(b => b.id == id);
-
-        // if(bookmarkIndex === -1) {
-        //     logger.error(`Bookmark with id ${id} not found.`)
-        // }
-
-        // bookmarks.splice(bookmarkIndex, 1)
-
-        // logger.info('Delete Bookmark with id ${id}.')
-
-        // res
-        //     .status(204)
-        //     .end()
         bookmarksServices.deleteBookmark(
             req.app.get('db'),
             req.params.id
         )
         .then(() => {
+            res.status(204).end()
+        })
+        .catch(next)
+    })
+    .patch(bodyParser, (req, res, next) => {
+        const { title, url, description, rating } = req.body
+        const bookmarkToUpdate = { title, url, description, rating }
+        
+        const numberOfValues = Object.values(bookmarkToUpdate).filter(Boolean).length
+        if(numberOfValues === 0) {
+            return res.status(400).json({
+                error: {
+                    message: `Request body must contain either 'title', 'url', 'description' or 'rating'`
+                }
+            })
+        }
+        
+        bookmarksServices.updateBookmark(
+            req.app.get('db'),
+            req.params.id,
+            bookmarkToUpdate
+        )
+        .then(numRowsAffected => {
             res.status(204).end()
         })
         .catch(next)
